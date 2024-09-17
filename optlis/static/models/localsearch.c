@@ -29,9 +29,9 @@ struct budget {
   int32_t consumed;
 };
 
-bool can_swap(size_t i, size_t j, double relaxation_threshold,
+bool can_relocate(size_t i, size_t j, double relaxation_threshold,
               const double *task_risks);
-void swap(size_t i, size_t j, int32_t *task_list, double *task_risks);
+void relocate(size_t i, size_t j, int32_t *task_list, double *task_risks);
 double overall_risk(size_t ntasks, const double *task_risks,
                     const int32_t *finish_times);
 double earliest_finish_time(const struct instance *inst, struct solution *sol);
@@ -50,8 +50,8 @@ bool try_improve_solution(const struct instance *inst, struct solution *sol,
       if (budget->consumed >= budget->max)
         return false;
 
-      if (can_swap(i, j, sol->relaxation_threshold, sol->task_risks)) {
-        swap(i, j, sol->task_list, sol->task_risks);
+      if (can_relocate(i, j, sol->relaxation_threshold, sol->task_risks)) {
+        relocate(i, j, sol->task_list, sol->task_risks);
 
         earliest_finish_time(inst, sol);
         budget->consumed++;
@@ -61,7 +61,7 @@ bool try_improve_solution(const struct instance *inst, struct solution *sol,
           return true;
         }
 
-        swap(i, j, sol->task_list, sol->task_risks);
+        relocate(j, i, sol->task_list, sol->task_risks);
         sol->objective = current_objective;
       }
     }
@@ -89,24 +89,54 @@ void print_info(const struct instance *inst, const struct solution *sol,
   printf("%d consumed %d max\n", budget->consumed, budget->max);
 }
 
-void swap(size_t i, size_t j, int32_t *task_list, double *task_risks) {
-  int32_t taux = task_list[i];
-  task_list[i] = task_list[j];
-  task_list[j] = taux;
+void relocate(size_t i, size_t j, int32_t *task_list, double *task_risks) {
 
-  double raux = task_risks[i];
-  task_risks[i] = task_risks[j];
-  task_risks[j] = raux;
+  if (i == j) {
+      return;
+  }
+
+  // Relocate for `task_list`
+  int32_t task_to_relocate = task_list[i];
+
+  // Shift elements to the right if moving to a higher index
+  if (i < j) {
+    for (int k = i; k < j; k++) {
+      task_list[k] = task_list[k + 1];
+    }
+  } 
+  // Shift elements to the left if moving to a lower index
+  else {
+    for (int k = i; k > j; k--) {
+      task_list[k] = task_list[k - 1];
+    }
+  }
+
+  task_list[j] = task_to_relocate;
+
+  // Relocate for `task_risks`
+  double risk_to_relocate = task_risks[i];
+
+  // Shift elements to the right if moving to a higher index
+  if (i < j) {
+    for (int k = i; k < j; ++k) {
+      task_risks[k] = task_risks[k + 1];
+    }
+  } 
+  // Shift elements to the left if moving to a lower index
+  else {
+    for (int k = i; k > j; --k) {
+      task_risks[k] = task_risks[k - 1];
+    }
+  }
+
+  task_risks[j] = risk_to_relocate;
 }
 
 // FIXME: if the solution is unfeasible, it will return false even for valid swaps
-bool can_swap(size_t i, size_t j, double relaxation_threshold,
-              const double *task_risks) {
+bool can_relocate(size_t i, size_t j, double relaxation_threshold,
+                  const double *task_risks) {
 
-  if (i >= j)
-    return false;
-
-  else if (relaxation_threshold >= 1)
+  if (relaxation_threshold >= 1)
     return true;
 
   double lowest_risk = INT_MAX;
